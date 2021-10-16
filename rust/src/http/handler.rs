@@ -8,7 +8,7 @@ pub struct Handler {
 }
 
 impl Handler {
-	/// Ceeate a new Handler from a [RequestMatcher] and a handler function
+	/// Ceeate a new Handler from a matcher function and a handler function
 	pub fn new(
 		matcher_fn: fn(req: &super::Request) -> bool,
 		handler_fn: fn(&super::Request, super::Response),

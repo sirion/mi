@@ -1,4 +1,4 @@
-/// A combination of matcher and handler function for [Request]s. A standard implementation is available with [Handler].
+/// A combination of matcher and handler function for [super::Request]s. A standard implementation is available with [super::Handler].
 pub trait RequestHandler: Sync + Send {
 	/// Returns true if the handling method whould be called for the given request
 	fn matches(&self, req: &super::Request) -> bool;

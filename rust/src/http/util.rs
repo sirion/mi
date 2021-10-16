@@ -1,16 +1,20 @@
 use crate::log_error;
 
+/// Carriage Return byte (\r)
 pub const CR: u8 = '\r' as u8;
+/// Line Feed byte (\n)
 pub const LF: u8 = '\n' as u8;
+/// Space byte
 pub const SP: u8 = ' ' as u8;
+/// CR + LF (\r\n)
 pub const CRLF: [u8; 2] = [CR, LF];
 
 pub const DEFAULT_HANDLER: fn(req: &super::Request, res: super::Response) =
 	|req: &super::Request, mut res: super::Response| {
 		res.status_code = 404;
 		res.headers.set("Content-Type", "text/html");
-		res.write("Not found: ".as_bytes());
-		res.write(req.uri.as_bytes());
+		let _ = res.write("Not found: ");
+		let _ = res.write(&req.uri);
 		match res.end() {
 			Ok(_) => {}
 			Err(e) => log_error!("Error writing to response in default handler: {}", e),

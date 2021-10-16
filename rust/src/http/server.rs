@@ -30,8 +30,8 @@ use threadpool::ThreadPool;
 /// }
 /// ```
 ///
-/// Alternatively, you can add a handler which implements the [RequestHandler] trait. The Default implementation is
-/// [Handler] and will automatically be created when using handle().
+/// Alternatively, you can add a handler which implements the [super::RequestHandler] trait. The Default implementation is
+/// [super::Handler] and will automatically be created when using handle().
 ///
 /// ```
 /// use mi::http::*;
@@ -68,7 +68,7 @@ impl Server {
 		}
 	}
 
-	/// Adds a handler function to the server along with a matcher function. A [RequestHandler] is created and then
+	/// Adds a handler function to the server along with a matcher function. A [super::RequestHandler] is created and then
 	/// added via [Server.handler].
 	/// The matcher function is used to check if it matches the request in the order they were added to the server.
 	/// That means if the first matcher function matches everything, the other ones will never be called.
@@ -111,7 +111,7 @@ impl Server {
 		self.handler(Arc::new(super::Handler::new(matcher_fn, handler_fn)));
 	}
 
-	/// Adds a [RequestHandler] to the server.
+	/// Adds a [super::RequestHandler] to the server.
 	pub fn handler(&mut self, handler: Arc<dyn super::RequestHandler>) {
 		self.handlers.push(handler);
 	}

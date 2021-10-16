@@ -1,16 +1,15 @@
 use super::util::lookup_status_str;
 use super::util::CRLF;
-use super::Error;
-use super::Headers;
+use super::ValuesMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 
-/// Outgoing response to an incoming [Request]
+/// Outgoing response to an incoming [super::Request]
 /// TODO: Chunked encoding is currently not supported
 pub struct Response {
-	/// The headers to send to the client. By default [Request] headers don't perform any case handling
-	pub headers: Headers,
+	/// The headers to send to the client. By default [super::Request] headers don't perform any case handling
+	pub headers: ValuesMap,
 	/// The
 	pub status_code: u16,
 	/// The status string to send along the status code
@@ -27,13 +26,6 @@ pub struct Response {
 	request_uri: String,
 }
 
-impl Drop for Response {
-	fn drop(&mut self) {
-		if !self.closed {
-			let _ = self.end();
-		}
-	}
-}
 impl Response {
 	/// Creates a new Response that writes to the given TCPStream
 	pub fn new_for(
@@ -45,7 +37,7 @@ impl Response {
 			stream,
 			request_method: req.method.clone(),
 			request_uri: req.uri.clone(),
-			headers: Headers::new(),
+			headers: ValuesMap::new(),
 			body: Vec::new(),
 			status: "",
 			status_code: 200,
@@ -55,14 +47,19 @@ impl Response {
 		}
 	}
 
-	/// Write string like data to the response
-	pub fn ws<S: AsRef<str>>(&mut self, data: S) {
-		self.write(data.as_ref().as_bytes());
+	/// Convenience method to allow writing and ignoring the result
+	pub fn w<S: AsRef<[u8]>>(&mut self, data: S) {
+		let _ = self.write(data);
+	}
+
+	/// Used by the write! macro
+	pub fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> Result<(), std::io::Error> {
+		self.write(format!("{}", args))?;
+		Ok(())
 	}
 
 	/// Write data into the [Response] body
-	pub fn write<S: AsRef<[u8]>>(&mut self, data: S) /* -> Result<(), Box<dyn std::error::Error>> */
-	{
+	pub fn write<S: AsRef<[u8]>>(&mut self, data: S) -> Result<usize, std::io::Error> {
 		if self.closed {
 			super::util::log(
 				&self.log_error,
@@ -71,11 +68,14 @@ impl Response {
 					self.request_method, self.request_uri
 				),
 			);
-			return;
+			return Err(std::io::Error::new(
+				std::io::ErrorKind::NotConnected,
+				"Connection closed",
+			));
 		}
 
 		self.body.extend_from_slice(data.as_ref());
-		// Ok(())
+		Ok(data.as_ref().len())
 	}
 
 	/// Clears the currently buffered body content that was adde since the last send
@@ -84,7 +84,7 @@ impl Response {
 	}
 
 	/// Sends the headers and all currently available data in the body to the client without closing the connection.
-	pub fn send(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+	pub fn send(&mut self) -> Result<(), std::io::Error> {
 		if !self.header_sent {
 			self.send_headers()?;
 		}
@@ -95,7 +95,7 @@ impl Response {
 		Ok(())
 	}
 
-	fn send_headers(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+	fn send_headers(&mut self) -> Result<(), std::io::Error> {
 		let mut head: Vec<u8> = Vec::new();
 		head.extend("HTTP/1.1 ".as_bytes());
 		head.extend(format!("{} ", self.status_code).as_bytes());
@@ -103,6 +103,17 @@ impl Response {
 		if self.status.len() == 0 {
 			// Use Default status string if none is set
 			self.status = lookup_status_str(self.status_code);
+		}
+
+		if self.status_code >= 400 {
+			// Log errors
+			super::util::log(
+				&self.log_error,
+				format!(
+					"Error {} {}, for {} {}",
+					self.status_code, self.status, self.request_method, self.request_uri
+				),
+			);
 		}
 
 		head.extend(self.status.as_bytes());
@@ -127,7 +138,7 @@ impl Response {
 	}
 
 	/// Send all remaining data and closes the connection.
-	pub fn end(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+	pub fn end(&mut self) -> Result<(), std::io::Error> {
 		if self.closed {
 			super::util::log(
 				&self.log_error,
@@ -136,7 +147,10 @@ impl Response {
 					self.request_method, self.request_uri
 				),
 			);
-			return Err(Error::boxed(500, "Connection closed"));
+			return Err(std::io::Error::new(
+				std::io::ErrorKind::NotConnected,
+				"Connection closed",
+			));
 		}
 		self.closed = true;
 
@@ -153,5 +167,24 @@ impl Response {
 		self.stream.shutdown(std::net::Shutdown::Both)?;
 
 		Ok(())
+	}
+}
+
+impl Drop for Response {
+	/// Automatically end the response when is is dropped
+	fn drop(&mut self) {
+		if !self.closed {
+			match self.end() {
+				Err(e) => {
+					let mut g = self.log_error.lock().unwrap();
+					let _ = write!(
+						g,
+						"Auto ending request on drop failed for {}: {}",
+						self.request_uri, e
+					);
+				}
+				Ok(_) => {}
+			}
+		}
 	}
 }

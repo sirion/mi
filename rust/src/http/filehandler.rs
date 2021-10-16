@@ -17,7 +17,7 @@ pub struct FileHandler<'a> {
 }
 
 impl<'a> FileHandler<'a> {
-	/// Returns a new [RequestHandler] that serves files for the URLs that start with uri_prefix relative to the given
+	/// Returns a new [super::RequestHandler] that serves files for the URLs that start with uri_prefix relative to the given
 	/// root path.
 	pub fn new<P: AsRef<Path>>(uri_prefix: &str, root: P) -> FileHandler {
 		FileHandler {
@@ -100,7 +100,7 @@ impl<'a> FileHandler<'a> {
 		})
 	}
 
-	fn list_dir(&self, mut res: super::Response, path: PathBuf) {
+	fn list_dir(&self, mut res: super::Response, path: PathBuf) -> Result<(), std::io::Error> {
 		let entries = match std::fs::read_dir(&path) {
 			Ok(e) => e,
 			Err(e) => {
@@ -114,7 +114,8 @@ impl<'a> FileHandler<'a> {
 		};
 
 		res.headers.set("Content-Type", "text/html");
-		res.write("<!DOCTYPE html><body><ul>".as_bytes());
+
+		res.write("<!DOCTYPE html><body><ul>")?;
 		for entry in entries {
 			let file = match entry {
 				Ok(f) => f,
@@ -138,28 +139,34 @@ impl<'a> FileHandler<'a> {
 
 			log_info!(" - {}", name);
 
-			res.write("<li>");
-			res.write("<a href=\"");
-			res.write(name.replace("\"", "\\\""));
-			res.write("\">");
-			res.write(name);
-			res.write("</a>");
-			res.write("</li>");
+			res.write("<li>")?;
+			res.write("<a href=\"")?;
+			res.write(name.replace("\"", "\\\""))?;
+			res.write("\">")?;
+			res.write(name)?;
+			res.write("</a>")?;
+			res.write("</li>")?;
 		}
-		res.write("</ul></body>".as_bytes());
+		res.write("</ul></body>")?;
 		//let _ = res.end();
+		Ok(())
 	}
 
-	fn serve_error(&self, mut res: super::Response, code: u16, message: &str) {
+	fn serve_error(
+		&self,
+		mut res: super::Response,
+		code: u16,
+		message: &str,
+	) -> Result<(), std::io::Error> {
 		res.headers.set("Content-Type", "text/plain");
 		res.status_code = code;
 		res.status = super::util::lookup_status_str(code);
 		res.clear();
-		res.write(message.as_bytes());
-		let _ = res.end();
+		res.write(message)?;
+		res.end()
 	}
 
-	fn serve_file(&self, mut res: super::Response, path: PathBuf) {
+	fn serve_file(&self, mut res: super::Response, path: PathBuf) -> Result<(), std::io::Error> {
 		match std::fs::read(&path) {
 			Ok(data) => {
 				res.status_code = 200;
@@ -168,21 +175,23 @@ impl<'a> FileHandler<'a> {
 					.set("Content-Type", &self.mimetype_for_extension(path));
 
 				// TODO: Maybe think about ading a method for writing into the stream directly for performance reasons...?
-				res.write(&data);
+				res.write(&data)?;
 
-				match res.end() {
-					Ok(_) => {}
-					Err(e) => log_error!("Error writing to response in handler serve_file: {}", e),
-				};
+				return res.end();
 			}
 			Err(e) => {
 				log_error!("Internal Sever Error: {}", e);
-				self.serve_error(res, 500, "Internal Server Error");
+				return self.serve_error(res, 500, "Internal Server Error");
 			}
 		}
 	}
 
-	fn serve(&self, res: super::Response, path: PathBuf, uri_path: &str) {
+	fn serve(
+		&self,
+		res: super::Response,
+		path: PathBuf,
+		uri_path: &str,
+	) -> Result<(), std::io::Error> {
 		if path.exists() {
 			let is_dir = path.is_dir();
 			let has_slash = uri_path.ends_with("/") || uri_path == "";
@@ -196,14 +205,14 @@ impl<'a> FileHandler<'a> {
 				}
 
 				if self.list_dirs {
-					self.list_dir(res, path);
+					return self.list_dir(res, path);
 				} else {
 					return self.serve_error(res, 404, &format!("Not found: {}", uri_path));
 				}
 			} else if is_dir {
 				return self.serve_error(res, 404, &format!("Not found: {}", uri_path));
 			} else if path.is_file() {
-				self.serve_file(res, path);
+				return self.serve_file(res, path);
 			} else {
 				log_error!(
 					"Internal Sever Error - path is neither file nor directory: {}",
@@ -212,7 +221,7 @@ impl<'a> FileHandler<'a> {
 				self.serve_error(res, 500, "Internal Server Error")
 			}
 		} else {
-			self.serve_error(res, 404, &format!("Not found: {}", uri_path));
+			return self.serve_error(res, 404, &format!("Not found: {}", uri_path));
 		}
 	}
 }
@@ -229,6 +238,6 @@ impl<'a> super::RequestHandler for FileHandler<'a> {
 		}
 
 		let path = self.root.join(PathBuf::from(uri_path));
-		self.serve(res, path, uri_path);
+		let _ = self.serve(res, path, uri_path);
 	}
 }

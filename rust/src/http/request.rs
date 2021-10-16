@@ -1,15 +1,16 @@
 use super::util::{index_of, to_lines};
 use super::util::{CR, LF, SP};
 use super::Error;
-use super::Headers;
+use super::ValuesMap;
 use crate::bin::Find;
+use crate::log_error;
 use std::io::prelude::*;
 use std::net::TcpStream;
 
 /// Incoming request
 pub struct Request {
 	/// Headers sent by the client
-	pub headers: Headers,
+	pub headers: ValuesMap,
 	/// HTTP Method sent by the client
 	pub method: String,
 	/// Requested URI
@@ -22,6 +23,7 @@ pub struct Request {
 	body_length: usize,
 	read_bytes: usize,
 	body: Vec<u8>,
+	query_parameters: ValuesMap,
 }
 
 impl Request {
@@ -91,7 +93,7 @@ impl Request {
 
 		let first_line = header_lines.remove(0);
 
-		let mut headers = Headers::new();
+		let mut headers = ValuesMap::new();
 		headers.case_handling = true;
 		for line in header_lines {
 			match index_of(&line, ':' as u8) {
@@ -104,16 +106,10 @@ impl Request {
 			}
 		}
 
-		// first_line should only be the request line
-		let mut split = first_line
-			.splitn(3, |c| c == &SP)
-			.map(|s| String::from_utf8(Vec::from(s)).unwrap())
-			.collect::<Vec<String>>();
+		// first_line must contain the request line
+		let (method, uri, http_version) = split_request_line(&first_line);
 
-		assert_eq!(split.len(), 3);
-		let http_version = split.pop().unwrap();
-		let uri = split.pop().unwrap();
-		let method = split.pop().unwrap();
+		let query_parameters = uri_parameters(&uri);
 
 		// Find out if somethin from the
 		let body_length = match headers.get("Content-Length") {
@@ -133,6 +129,7 @@ impl Request {
 			body,
 			read_bytes,
 			body_length,
+			query_parameters,
 		})
 	}
 
@@ -154,4 +151,44 @@ impl Request {
 	pub fn clone_stream(&self) -> Result<TcpStream, std::io::Error> {
 		self.stream.try_clone()
 	}
+
+	/// Returns the query parameters as a HashMap if string vectors
+	pub fn get_query_parameters(&self) -> &ValuesMap {
+		&self.query_parameters
+	}
+}
+
+pub fn split_request_line(line: &[u8]) -> (String, String, String) {
+	let mut split = line
+		.splitn(3, |c| c == &SP)
+		.map(|s| String::from_utf8(Vec::from(s)).unwrap())
+		.collect::<Vec<String>>();
+
+	assert_eq!(split.len(), 3);
+
+	let http_version = split.pop().unwrap();
+	let uri = split.pop().unwrap();
+	let method = split.pop().unwrap();
+
+	(method, uri, http_version)
+}
+
+fn uri_parameters(uri: &str) -> ValuesMap {
+	let mut parameters = ValuesMap::new();
+
+	if let Some(pos) = uri.find("?") {
+		let (_, query_str) = uri.split_at(pos + 1);
+		for pairs in query_str.split::<&str>("&") {
+			let parts: Vec<&str> = pairs.splitn(2, "=").collect();
+			if parts.len() == 2 {
+				parameters.add(parts[0], parts[1]);
+			} else if parts.len() == 1 {
+				parameters.add(parts[0], "");
+			} else {
+				log_error!("Invalid query parameter: {}", pairs);
+			}
+		}
+	}
+
+	parameters
 }

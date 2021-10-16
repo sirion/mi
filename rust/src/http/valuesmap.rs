@@ -1,25 +1,25 @@
 use std::collections::HashMap;
 
-/// Header map for [Request]s and [Response]s
-pub struct Headers {
-	/// If case_handling is set to true, header keys will be changed to the de-facto standard of starting with an
-	/// upper-case letter at the beginning and after every dash.
-	/// For performance reasons this defaults to false for [Response]s and for compatibility reasons this is set to
-	/// true for incoming [Request]s
+/// Header map for [super::Request]s and [super::Response]s
+pub struct ValuesMap {
+	/// If case_handling is set to true, header keys will be changed to the de-facto standard for headers of starting
+	/// with an upper-case letter at the beginning and after every dash.
+	/// For performance reasons this defaults to false for ValuesMaps used for headers in [super::Response]s and for
+	/// compatibility reasons this is set to true for ones used in incoming [super::Request]s
 	pub case_handling: bool,
 	values: HashMap<String, Vec<String>>,
 }
 
-impl Headers {
-	/// Creates new [Headers]
-	pub fn new() -> Headers {
-		Headers {
+impl ValuesMap {
+	/// Creates new [super::ValuesMap]
+	pub fn new() -> ValuesMap {
+		ValuesMap {
 			case_handling: false,
 			values: HashMap::new(),
 		}
 	}
 
-	/// Returns a reference to all currently stored headers as a map of string vectors
+	/// Returns a reference to all currently stored values as a map of string vectors
 	pub fn all(&self) -> &HashMap<String, Vec<String>> {
 		&self.values
 	}
@@ -38,6 +38,11 @@ impl Headers {
 			},
 			None => None,
 		}
+	}
+
+	/// Returns a vector of all values stored for the given key
+	pub fn get_all(&self, k: &str) -> Option<&Vec<String>> {
+		self.values.get(k)
 	}
 
 	/// Sets the given header and replaces any values previously set for this key
@@ -63,6 +68,11 @@ impl Headers {
 		} else {
 			self.values.get_mut(&key).unwrap().push(String::from(v));
 		}
+	}
+
+	/// Returns true is no values are stored
+	pub fn is_empty(&self) -> bool {
+		self.values.is_empty()
 	}
 
 	fn header_case(&self, k: &str) -> String {
