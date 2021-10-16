@@ -1,5 +1,6 @@
-use crate::logger::{debugln, errorln};
-use std::path::PathBuf;
+use crate::log_debug;
+use crate::logger::errorln;
+use std::path::{Path, PathBuf};
 
 /// Copies a source to a target path. If source is a directory
 pub fn copy_recursively(from: &PathBuf, to: &PathBuf) -> std::io::Result<()> {
@@ -58,7 +59,7 @@ pub fn copy_recursively(from: &PathBuf, to: &PathBuf) -> std::io::Result<()> {
 
 /// Reads a directory into a vector of [std::path::PathBuf]. Always returns a Vec<PathBuf>, skipping all entries that
 /// cannot be read, returning an empty one if the dir is not a directory.
-pub fn list_dir(dir: &PathBuf) -> Vec<PathBuf> {
+pub fn list_dir(dir: &Path) -> Vec<PathBuf> {
 	let mut files: Vec<PathBuf> = Vec::new();
 
 	if !dir.is_dir() {
@@ -116,7 +117,7 @@ pub fn sanitize(s: &str) -> String {
 		cleaned.push(c);
 	}
 
-	debugln(format!("Sanitized: \"{}\" => \"{}\"", s, cleaned));
+	log_debug!("Sanitized: \"{}\" => \"{}\"", s, cleaned);
 	cleaned
 }
 
