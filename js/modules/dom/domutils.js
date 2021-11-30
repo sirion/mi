@@ -29,6 +29,10 @@ function d(options) {
 		classes.forEach(cl => el.classList.add(cl));
 	}
 
+	if (options.textContent) {
+		el.textContent = options.textContent;
+	}
+
 	if (options.content) {
 		if (typeof options.content === "string") {
 			el.textContent = options.content;
