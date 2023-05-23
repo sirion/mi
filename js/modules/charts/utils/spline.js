@@ -111,6 +111,10 @@ export default class Spline {
 	}
 
 	_interpolateY(x) {
+		if (this._yValues.length == 1) {
+			return this._yValues[0];
+		}
+
 		let max = this._xValues.length - 1;
 		let min = 0;
 
@@ -186,4 +190,3 @@ export default class Spline {
 	}
 
 }
-
